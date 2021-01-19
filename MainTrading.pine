@@ -1,0 +1,252 @@
+//@version=4
+// ************
+//    MACD
+// ************
+// study(title="MACD", shorttitle="MACD", resolution="")
+// // Getting inputs
+// fast_length = input(title="Fast Length", type=input.integer, defval=12)
+// slow_length = input(title="Slow Length", type=input.integer, defval=26)
+// src = input(title="Source", type=input.source, defval=close)
+// signal_length = input(title="Signal Smoothing", type=input.integer, minval = 1, maxval = 50, defval = 9)
+// sma_source = input(title="Simple MA(Oscillator)", type=input.bool, defval=false)
+// sma_signal = input(title="Simple MA(Signal Line)", type=input.bool, defval=false)
+// // Plot colors
+// col_grow_above = #26A69A
+// col_grow_below = #FFCDD2
+// col_fall_above = #B2DFDB
+// col_fall_below = #EF5350
+// col_macd = #0094ff
+// col_signal = #ff6a00
+// // Calculating
+// fast_ma = sma_source ? sma(src, fast_length) : ema(src, fast_length)
+// slow_ma = sma_source ? sma(src, slow_length) : ema(src, slow_length)
+// macd = fast_ma - slow_ma
+// signal = sma_signal ? sma(macd, signal_length) : ema(macd, signal_length)
+// hist = macd - signal
+// plot(hist, title="Histogram", style=plot.style_columns, color=(hist>=0 ? (hist[1] < hist ? col_grow_above : col_fall_above) : (hist[1] < hist ? col_grow_below : col_fall_below) ), transp=0 )
+// plot(macd, title="MACD", color=col_macd, transp=0)
+// plot(signal, title="Signal", color=col_signal, transp=0)
+
+//@version=4
+study("ARK",overlay=true,max_bars_back = 1000)
+//========== 功能开关，可按自己需要在设置页面中的顺序 ==========
+// 更改 defval 的值可以更改默认显示或关闭，调整当前功能中的顺序，自定义设置面板顺序
+i_deductSwitch = input(defval=false,title="🕵 Deduct Period (ON/OFF) 推演周期显示",type=input.bool)
+i_moveTime = input(defval=10,title="🐖 Go! Go! Go! 推演周期设置",type=input.integer,minval=3,maxval=39,step=1)
+i_deductionMoveOffset = input(defval=0,title="🐖 Move Lable Forward 抵扣价前移",type=input.integer,minval=0,step=5)
+// 以下仅有开关，无参数设置
+// 开关：缺口探测
+gapSwitch = input (defval=false,title="✂Show Gaps (ON/OFF) 缺口探测" ,type=input.bool)
+// 开关：抵扣价格显示
+i_deductionLabelSwitch = input (defval=false,title="💬 Price Lable Switch (ON/OFF) 抵扣价格显示",type=input.bool)
+// 开关：SMA
+i_smaSwitch = input (defval=true,title="📈 MA System (ON/OFF) SMA 均线开关",type=input.bool)
+//开关：EMA
+i_emaSwitch = input (defval=true,title="📈 EMA System (ON/OFF) EMA 均线开关",type=input.bool)
+// 开关：K 线变色
+i_kLineColorSwitch=input (defval=false,title="🕶 Change Candle Color (ON/OFF) K 线变色",type=input.bool)
+// 开关：抵扣价显示
+i_deductionSwitch = input (defval=true,title="🌗 Yellow Price Mark (ON/OFF) 抵扣价小黄点",type=input.bool)
+// 开关：抵扣平移指标
+i_ductionOffsetSwitch = input (defval=true,title="↕ DKJ Vertical Ref (ON/OFF) 抵扣价平移指示",type=input.bool)
+
+// 基础均线天数设置
+
+d = input(title="MA/EMA Day", type=input.integer, defval=20)
+
+// ========== Moving Average System 双均线功能 ==========
+// Plot Color
+col_ma_s = input(title="MA/EMA Line Color(S)", type=input.color, defval=color.white)
+col_ma_m = input(title="MA/EMA Line Color(M)", type=input.color, defval=color.red)
+col_ma_l = input(title="MA/EMA Line Color(L)", type=input.color, defval=color.blue)
+
+// sma
+plot(i_smaSwitch?sma(close,d):na,linewidth=1, transp = 75, color = bar_index % 2 == 0 and not barstate.islast ? color.new(color.white,100):col_ma_s,title="MA20",style=plot.style_linebr, editable=false)
+plot(i_smaSwitch?sma(close,d*3):na,linewidth=1, transp = 75, color = bar_index % 2 == 0 and not barstate.islast ? color.new(color.white,100):col_ma_m,title="MA60",style=plot.style_line,editable=false)
+plot(i_smaSwitch?sma(close,d*6):na,linewidth=1, transp = 75, color= bar_index % 2 == 0 and not barstate.islast ? color.new(color.white,100):col_ma_l,title="MA120",style=plot.style_line,editable=false)
+
+// ema
+plot(i_emaSwitch?ema(close,d):na,linewidth=1,color=col_ma_s, transp = 50, title="EMA20",editable=false)
+plot(i_emaSwitch?ema(close,d*3):na,linewidth=1,color=col_ma_m, transp = 50, title="EMA60",editable=false)
+plot(i_emaSwitch?ema(close,d*6):na,linewidth=1,color=col_ma_l, transp = 50, title="EMA120",editable=false)
+
+// ========== Short Trend Change K 线变色功能 ==========
+ConAqua  = close>ema(close,d) and close>sma(close,d) and close>close[d] 
+ConBlack = close<ema(close,d) and close<sma(close,d) and close<close[d] 
+ConGray  = not(ConAqua and ConBlack)
+ChangeColorGray = (ConGray and i_kLineColorSwitch==1) ? color.silver:na
+ChangeColorAqua = (ConAqua and i_kLineColorSwitch==1) ? color.aqua:na
+ChangeColorBlack = (ConBlack and i_kLineColorSwitch==1) ? color.black:na
+barcolor(ChangeColorAqua,editable=false)
+barcolor(ChangeColorBlack,editable=false)
+barcolor(ChangeColorGray,editable=false)
+
+// ========== Deduction Yellow Dot 抵扣价小黄点标记 ==========
+showDot = barstate.islast and i_deductionSwitch==1
+// plot(ConLeiDK?close[i_deductionMoveOffset]:na,color=color.new(color.yellow,10),linewidth=4,offset=-i_deductionMoveOffset,style=plot.style_circles,editable=false,show_last=1)
+plot(showDot?close[d+i_deductionMoveOffset]:na,color=color.new(color.yellow,10),linewidth=4,offset=-i_deductionMoveOffset-d,style=plot.style_circles,editable=false,show_last=1)
+plot(showDot?close[d*3+i_deductionMoveOffset]:na,color=color.new(color.yellow,10),linewidth=4,offset=-i_deductionMoveOffset-d*3,style=plot.style_circles,editable=false,show_last=1)
+plot(showDot?close[d*6+i_deductionMoveOffset]:na,color=color.new(color.yellow,10),linewidth=4,offset=-i_deductionMoveOffset-d*6,style=plot.style_circles,editable=false,show_last=1)
+
+// ========== 抵扣价平移到第一根 K 线，方便对比抵扣价对价格的压力 ==========
+showCompairDots = barstate.islast and i_ductionOffsetSwitch==1
+plot(showCompairDots?close[20+i_deductionMoveOffset]:na,color=color.new(color.white,61),linewidth=3,offset=-i_deductionMoveOffset,style=plot.style_circles,editable=false,show_last=1)
+plot(showCompairDots?close[60+i_deductionMoveOffset]:na,color=color.new(color.red,61),linewidth=3,offset=-i_deductionMoveOffset,style=plot.style_circles,editable=false,show_last=1)
+plot(showCompairDots?close[120+i_deductionMoveOffset]:na,color=color.new(color.blue,61),linewidth=3,offset=-i_deductionMoveOffset,style=plot.style_circles,editable=false,show_last=1)
+
+//==========Price Lable 显示抵扣价价格功能 ==========
+var label _currentLabel = na
+var label _shortTermLabel = na
+var label _midTermLabel = na
+var label _longTermLabel = na
+if barstate.islast and i_deductionLabelSwitch==true
+    _currentLabel := label.new(
+      x=bar_index -i_deductionMoveOffset ,
+      y=na,
+      yloc=close[0+i_deductionMoveOffset]>close[5+i_deductionMoveOffset]?yloc.abovebar:yloc.belowbar,
+      style=close[0+i_deductionMoveOffset]>close[5+i_deductionMoveOffset]?label.style_label_lower_left:label.style_label_upper_left,
+      text=tostring(close[0+i_deductionMoveOffset],'#.00'),
+      textcolor=color.black,
+      color=color.new(color.yellow,50),
+      size=size.small)
+    //label for short term
+    _shortTermLabel := label.new(
+      x=bar_index[20]-i_deductionMoveOffset ,
+      y=na,
+      yloc=close[20+i_deductionMoveOffset]>close[20+5+i_deductionMoveOffset]?yloc.abovebar:yloc.belowbar,
+      style=close[20+i_deductionMoveOffset]>close[20+5+i_deductionMoveOffset]?label.style_label_lower_right:label.style_label_upper_right,
+      text=tostring(close[i_deductionMoveOffset+20],'#.00'),
+      color=color.new(color.gray,30),
+      textcolor=color.black,
+      size=size.small)
+    //label for mid term
+    _midTermLabel := label.new(
+      x=bar_index[60]-i_deductionMoveOffset ,
+      y=na,
+      yloc=close[60+i_deductionMoveOffset]>close[60+5+i_deductionMoveOffset]?yloc.abovebar:yloc.belowbar,
+      style=close[60+i_deductionMoveOffset]>close[60+5+i_deductionMoveOffset]?label.style_label_lower_right:label.style_label_upper_right,
+      text=tostring(close[60+i_deductionMoveOffset],'#.00'),
+      color=color.new(color.red,30),
+      textcolor=color.black,
+      size=size.small)
+    //label for long term
+    _longTermLabel := label.new(
+      x=bar_index[120]-i_deductionMoveOffset ,
+      y=na,
+      yloc=close[120+i_deductionMoveOffset]>close[120+5+i_deductionMoveOffset]?yloc.abovebar:yloc.belowbar,
+      style=close[120+i_deductionMoveOffset]>close[120+5+i_deductionMoveOffset]?label.style_label_lower_right:label.style_label_upper_right,
+      text=tostring(close[120+i_deductionMoveOffset],'#.00'),
+      color=color.new(color.blue,30),
+      textcolor=color.black,
+      size=size.small)
+    label.delete(_currentLabel[1])
+    label.delete(_shortTermLabel[1])
+    label.delete(_midTermLabel[1])
+    label.delete(_longTermLabel[1])
+
+
+//==========GAP Detector 缺口探测功能 ==========
+GapUp1 = (gapSwitch==1 and low>high[1])?line.new(bar_index,low,bar_index[1],high[1],extend=extend.none,color=color.fuchsia,width=1):na
+GapUp2 = (gapSwitch==1 and low>high[1])?line.new(bar_index,high[1],bar_index[1],low,extend=extend.none,color=color.fuchsia,width=1):na
+GapDown1 = (gapSwitch==1 and high<low[1])?line.new(bar_index,high,bar_index[1],low[1],extend=extend.none,color=color.fuchsia,width=1):na
+GapDown2 = (gapSwitch==1 and high<low[1])?line.new(bar_index,low[1],bar_index[1],high,extend=extend.none,color=color.fuchsia,width=1):na
+length = 200
+width = 1
+min_pips=1
+gap_start = high[length]
+gap_end = low[length - 1]
+gap_bull = false
+gap_bear = false
+inf_gap = 0.0
+sup_gap = 0.0
+if barstate.islast
+    for j = 1 to length
+        gap_bull := false
+        gap_bear := false
+        inf_gap := 0.0
+        sup_gap := 0.0
+        if high[j] < low[j - 1] //bull gap
+            gap_start := high[j]
+            gap_end := low[j - 1]
+            gap_bull := true
+            inf_gap := gap_start
+            sup_gap := gap_end
+            for i = (j-1) to 0
+                sup_gap := min(sup_gap, low[i])
+            if ((sup_gap - inf_gap)/(syminfo.mintick*10) < min_pips) // only gap > min_pips are considered
+                gap_bull := false
+        if low[j] > high[j - 1] //bear gap
+            gap_start := low[j]
+            gap_end := high[j - 1]
+            gap_bear := true
+            inf_gap := gap_end
+            sup_gap := gap_start
+            for i = (j-1) to 0
+                inf_gap := max(inf_gap, high[i])
+            if ((sup_gap - inf_gap)/(syminfo.mintick*10) < min_pips) // only gap > min_pips pips are considered
+                gap_bear := false
+        if gap_bull and gapSwitch==1
+            line_bull_inf = line.new(x1 = bar_index[j], y1 = inf_gap, 
+                                     x2 = bar_index, y2 = inf_gap,
+                                     extend=extend.none, color = color.black, style = line.style_dashed, width = width)
+            line_bull_sup = line.new(x1 = bar_index[j-1], y1 = sup_gap, 
+                                     x2 = bar_index, y2 = sup_gap,
+                                     extend=extend.none, color = color.black, style = line.style_dashed, width = width)
+        if gap_bear and gapSwitch==1
+            line_bear_inf = line.new(x1 = bar_index[j-1], y1 = inf_gap, 
+                                     x2 = bar_index, y2 = inf_gap,
+                                     extend=extend.none, color = color.black, style = line.style_dashed, width = width)
+            line_bear_sup = line.new(x1 = bar_index[j], y1 = sup_gap, 
+                                     x2 = bar_index, y2 = sup_gap,
+                                     extend=extend.none, color = color.black, style = line.style_dashed, width = width)
+
+//==========Deduct Period 推演时间功能 ==========
+moveTime20 = 20-i_moveTime
+moveTime60 = 60-i_moveTime
+moveTime120 = 120-i_moveTime
+ConTbg = barstate.islast and i_deductSwitch==1
+bgcolor(color.yellow,transp=95,offset=-i_deductionMoveOffset,editable=false,show_last=1)
+// bgcolor(ConTbg?color.yellow:na,transp=95,offset=moveTime-i_deductionMoveOffset,editable=false,show_last=1)
+bgcolor(color.black,transp=90,offset=-20-i_deductionMoveOffset,editable=false,show_last=1)
+bgcolor(ConTbg?color.black:na,transp=95,offset=-moveTime20-i_deductionMoveOffset,editable=false,show_last=1)
+bgcolor(color.red,transp=90,offset=-60-i_deductionMoveOffset,editable=false,show_last=1)
+bgcolor(ConTbg?color.red:na,transp=95,offset=-moveTime60-i_deductionMoveOffset,editable=false,show_last=1)
+bgcolor(color.blue,transp=90,offset=-120-i_deductionMoveOffset,editable=false,show_last=1)
+bgcolor(ConTbg?color.blue:na,transp=95,offset=-moveTime120-i_deductionMoveOffset,editable=false,show_last=1)
+ypos=highest(high,150+i_deductionMoveOffset)
+var label dp20 = na
+var label dp60 = na
+var label dp120 = na
+if barstate.islast and i_deductSwitch==1
+    dp20 := label.new(
+      x=bar_index - i_deductionMoveOffset- 20 + 5,
+      y=ypos,
+      yloc=yloc.price,
+      text=tostring(i_moveTime,'#'),
+      textcolor=color.new(color.silver,50),
+      color=color.new(color.yellow,100),
+      style=label.style_label_down,
+      size=size.huge)
+      
+    dp60 := label.new(
+      x=bar_index -i_deductionMoveOffset - 60 + 5  ,
+      y=ypos,
+      yloc=yloc.price,
+      text=tostring(i_moveTime,'#'),
+      textcolor=color.new(color.silver,50),
+      color=color.new(color.yellow,100),
+      style=label.style_label_down,
+      size=size.huge)
+    dp120 := label.new(
+      x=bar_index -i_deductionMoveOffset - 120 + 5  ,
+      y=ypos,
+      yloc=yloc.price,
+      text=tostring(i_moveTime,'#'),
+      textcolor=color.new(color.silver,50),
+      color=color.new(color.yellow,100),
+      style=label.style_label_down,
+      size=size.huge)
+    
+    label.delete(dp20[1])
+    label.delete(dp60[1])
+    label.delete(dp120[1])
